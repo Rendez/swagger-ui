@@ -375,52 +375,53 @@ function SwaggerService(discoveryUrl, _apiKey, statusCallback) {
 
     fetchEndpoints: function() {
       updateStatus("Fetching API List...");
-	  var baseDiscoveryUrl = endsWith(discoveryUrl, "/") ? discoveryUrl.substr(0, discoveryUrl.length - 1) : discoveryUrl;
-	  if(endsWith(baseDiscoveryUrl, "/resources.json"))
-		baseDiscoveryUrl = baseDiscoveryUrl.substr(0, baseDiscoveryUrl.length - "/resources.json".length);
-	  else if(endsWith(baseDiscoveryUrl, "/resources"))
-		baseDiscoveryUrl = baseDiscoveryUrl.substr(0, baseDiscoveryUrl.length - "/resources".length);
-	
-	  this.discoveryUrlList.push(discoveryUrl);
-	  this.discoveryUrlList.push(baseDiscoveryUrl);
-	  this.discoveryUrlList.push(baseDiscoveryUrl + "/resources.json");
-	  this.discoveryUrlList.push(baseDiscoveryUrl + "/resources");
-	  
-	  log("Will try the following urls to discover api endpoints:")
-	  for(var i = 0; i < this.discoveryUrlList.length; i++)
-		log(" > " + this.discoveryUrlList[i]);
-	
-	  this.fetchEndpointsSeq();
+      
+      var baseDiscoveryUrl = endsWith(discoveryUrl, "/") ? discoveryUrl.substr(0, discoveryUrl.length - 1) : discoveryUrl;
+      
+      this.discoveryUrlList.push(discoveryUrl);
+      log("Will try the following urls to discover api endpoints:");
+      
+      for(var i = 0; i < this.discoveryUrlList.length; i++)
+        log(" > " + this.discoveryUrlList[i]);
+
+      this.fetchEndpointsSeq();
     },
 
     fetchEndpointsSeq: function() {
       var controller = this;
 
-	  if(this.discoveryUrlListCursor < this.discoveryUrlList.length) {
-		  var url = this.discoveryUrlList[this.discoveryUrlListCursor++]
-	      updateStatus("Fetching API List from " + url);
-		  log("Trying url " + url);
-	      $.getJSON(url + apiKeySuffix, function(response) {
-	      })
-	      .success(function(response) {
-		      log("Setting globalBasePath to " + response.basePath);
-		      globalBasePath = response.basePath;
-		      ApiResource.createAll(response.apis);  
-	          controller.fetchResources(response.basePath);
-	      })
-	   	  .error(function(response) { 
-	          controller.fetchEndpointsSeq();
-		  });
-	  } else {
-	      log ('Error with resource discovery. Exhaused all possible endpoint urls');
-	
-		  var urlsTried = "";
-		  for(var i = 0; i < this.discoveryUrlList.length; i++) {
-			urlsTried = urlsTried + "<br/>" + this.discoveryUrlList[i];
-		  }
-			
-	      updateStatus("Unable to fetch API Listing. Tried the following urls:" + urlsTried);
-	  }
+      if (this.discoveryUrlListCursor < this.discoveryUrlList.length) {
+        var url = this.discoveryUrlList[this.discoveryUrlListCursor++]
+        updateStatus("Fetching API List from " + url);
+        
+        $.ajax({
+          type: 'GET',
+          url: url + apiKeySuffix,
+          dataType: 'json',
+          beforeSend: function(xhr){
+            log("Trying url " + url + " with headers: {'Accept: application/schema+json'}");
+            xhr.setRequestHeader('Accept', 'application/schema+json');
+          }, 
+          success: function(response) {    
+            log("Setting globalBasePath to " + response.basePath);
+            globalBasePath = response.basePath;
+            ApiResource.createAll(response.apis);  
+            controller.fetchResources(response.basePath);
+          },
+          error: function(response) {    
+            controller.fetchEndpointsSeq();
+          }
+        });
+      } else {
+        log ('Error with resource discovery. Exhaused all possible endpoint urls');
+
+        var urlsTried = "";
+        for(var i = 0; i < this.discoveryUrlList.length; i++) {
+          urlsTried = urlsTried + "<br/>" + this.discoveryUrlList[i];
+        }
+
+        updateStatus("Unable to fetch API Listing. Tried the following urls:" + urlsTried);
+      }
     },
 
     fetchResources: function(basePath) {
@@ -437,9 +438,21 @@ function SwaggerService(discoveryUrl, _apiKey, statusCallback) {
       updateStatus("Fetching " + apiResource.name + "...");
       var resourceUrl = globalBasePath + apiResource.path_json + apiKeySuffix;
       log("resourceUrl: %o", resourceUrl);
-      $.getJSON(resourceUrl,
-      function(response) {
-        controller.loadResources(response, apiResource);
+      
+      $.ajax({
+        type: 'GET',
+        url: this.discoveryUrlList[0] + resourceUrl,
+        dataType: 'json',
+        beforeSend: function(xhr){
+          log("Trying url " + resourceUrl + " with headers: {'Accept: application/schema+json'}");
+          xhr.setRequestHeader('Accept', 'application/schema+json');
+        }, 
+        success: function(response) {    
+          controller.loadResources(response, apiResource);
+        },
+        error: function(response) {    
+          controller.loadResources(response, apiResource);
+        }
       });
     },
 
